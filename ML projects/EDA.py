@@ -64,8 +64,3 @@ def display_sample_images(class_name, num_samples=5):
         plt.title(class_name)
         plt.axis('off')
     plt.show()
-
-display_sample_images('cat')
-display_sample_images('dog')
-
-print("Pillow is installed and working!")
