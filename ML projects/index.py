@@ -5,6 +5,10 @@ import os
 from pathlib import Path
 from torchvision.datasets import ImageFolder
 from torch.utils.data import random_split
+import torch.nn as nn
+import torch.optim as optim
+from torchvision.models import vit_b_16
+from torch.utils.data import DataLoader
 
 def is_valid_image(filepath):
     try:
@@ -66,5 +70,63 @@ def prepare_datasets():
         print(f"Error preparing datasets: {str(e)}")
         return None, None
 
+def train_vit_model(train_dataset, val_dataset, num_epochs=10, batch_size=16, learning_rate=1e-4):
+    """
+    Train a Vision Transformer (ViT) model for binary classification.
+    """
+    # Load pre-trained ViT model
+    model = vit_b_16(pretrained=True)
+    model.heads = nn.Sequential(
+        nn.Linear(model.heads.head.in_features, 1),  # Binary classification
+        nn.Sigmoid()
+    )
+    model = model.to(device)
+
+    # Define loss function and optimizer
+    criterion = nn.BCELoss()
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+
+    # Create data loaders
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+
+    # Training loop
+    for epoch in range(num_epochs):
+        model.train()
+        train_loss = 0.0
+        for images, labels in train_loader:
+            images, labels = images.to(device), labels.to(device).float().unsqueeze(1)
+            optimizer.zero_grad()
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item()
+
+        # Validation loop
+        model.eval()
+        val_loss = 0.0
+        with torch.no_grad():
+            for images, labels in val_loader:
+                images, labels = images.to(device), labels.to(device).float().unsqueeze(1)
+                outputs = model(images)
+                loss = criterion(outputs, labels)
+                val_loss += loss.item()
+
+        print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {train_loss/len(train_loader):.4f}, Val Loss: {val_loss/len(val_loader):.4f}")
+
+    # Save the trained model
+    torch.save(model.state_dict(), "vit_binary_classifier.pth")
+    print("Model saved as vit_binary_classifier.pth")
+
 if __name__ == "__main__":
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     train_dataset, val_dataset = prepare_datasets()
+    if train_dataset and val_dataset:
+        train_vit_model(
+            train_dataset, 
+            val_dataset,
+            num_epochs=10,      # Increase for better results
+            batch_size=16,      # Reduce this (default is 32)
+            learning_rate=1e-4  # Adjust if training is unstable
+        )
